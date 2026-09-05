@@ -4,5 +4,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 config.yaml
+configs/*.yaml
+!configs/example.yaml
 *.log
 spec.md

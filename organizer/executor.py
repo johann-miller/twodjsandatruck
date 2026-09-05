@@ -124,10 +124,58 @@ def _resolve_file_conflict(dst: Path, strategy: str, dry_run: bool) -> tuple[Pat
     return dst, "skipped"
 
 
-def _extract_safe(zf: zipfile.ZipFile, dest_dir: Path) -> None:
+def _zip_parts(member) -> tuple[str, ...]:
+    return Path(member.filename.replace("\\", "/")).parts
+
+
+def _leading_folder_count(zf: zipfile.ZipFile, ctx: FileContext, template: str) -> int:
+    """How many leading zip folders to strip before extracting.
+
+    Rather than blindly flattening, this only peels folders whose names the
+    destination template will already re-create via the ``{artist}``/``{album}``
+    placeholders. Anything else (e.g. an album folder under a ``music/{artist}``
+    destination) is preserved verbatim. Returns 0 when stripping is unsafe
+    (stray top-level files, multiple root folders).
+    """
+    artist = ctx.tags.get("artist", "").lower().strip()
+    album = ctx.tags.get("album", "").lower().strip()
+    want_artist = "{artist}" in template
+    want_album = "{album}" in template
+    if (not want_artist and not want_album) or (want_artist and not artist) or (want_album and not album):
+        return 0
+
+    roots: dict[str, str] = {}
+    second_level: str | None = None
     for member in zf.infolist():
-        member_path = Path(member.filename)
-        components = member_path.parts
+        parts = _zip_parts(member)
+        if not parts or parts[0] in ("/", ""):
+            return 0
+        if parts[0].lower().strip() in _UNSAFE_COMPONENTS:
+            return 0
+        if len(parts) == 1 and not member.is_dir():
+            return 0
+        roots[parts[0].lower().strip()] = parts[0]
+        if len(parts) >= 2 and second_level is None:
+            second_level = parts[1]
+
+    if len(roots) != 1:
+        return 0
+
+    root = next(iter(roots.values())).lower().strip()
+    if want_artist and root == artist:
+        if want_album and second_level and second_level.lower().strip() == album:
+            return 2
+        return 1
+    if want_album and root == album:
+        return 1
+    return 0
+
+
+def _extract_safe(zf: zipfile.ZipFile, dest_dir: Path, strip: int = 0) -> None:
+    for member in zf.infolist():
+        components = _zip_parts(member)[strip:]
+        if not components:
+            continue
         if any(part in _UNSAFE_COMPONENTS for part in components):
             continue
         target = dest_dir.joinpath(*components)
@@ -142,7 +190,7 @@ def _extract_safe(zf: zipfile.ZipFile, dest_dir: Path) -> None:
                 shutil.copyfileobj(src, out)
 
 
-def _extract(path: Path, dest_dir: Path, rule: Rule, dry_run: bool) -> str:
+def _extract(path: Path, dest_dir: Path, rule: Rule, dry_run: bool, ctx: FileContext) -> str:
     conflict = dest_dir.exists() and any(dest_dir.iterdir())
     if conflict and rule.on_conflict == "skip":
         return "skipped"
@@ -155,9 +203,11 @@ def _extract(path: Path, dest_dir: Path, rule: Rule, dry_run: bool) -> str:
             return "skipped"
     if rule.destination.create_dirs and not dry_run:
         dest_dir.mkdir(parents=True, exist_ok=True)
-    if not dry_run:
-        with zipfile.ZipFile(path) as zf:
-            _extract_safe(zf, dest_dir)
+    with zipfile.ZipFile(path) as zf:
+        strip = _leading_folder_count(zf, ctx, rule.destination.template)
+        get_logger().debug("zip %s: stripping %d leading folder(s)", path, strip)
+        if not dry_run:
+            _extract_safe(zf, dest_dir, strip)
     return "extract" if dry_run else "extracted"
 
 
@@ -175,7 +225,7 @@ def process_path(path: Path, rule: Rule, dry_run: bool = False) -> str:
         dest_dir = resolve_template(rule.destination.template, ctx)
 
         if rule.action == "extract":
-            result = _extract(path, dest_dir, rule, dry_run)
+            result = _extract(path, dest_dir, rule, dry_run, ctx)
             destination = str(dest_dir)
         else:
             dst = dest_dir / path.name

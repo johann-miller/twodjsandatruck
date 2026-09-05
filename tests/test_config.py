@@ -92,7 +92,7 @@ def test_missing_file(tmp_path: Path):
 
 
 def test_example_config_is_valid():
-    example = Path(__file__).resolve().parent.parent / "config.example.yaml"
+    example = Path(__file__).resolve().parent.parent / "configs" / "example.yaml"
     cfg = load_config(example)
     assert any(r.action == "extract" for r in cfg.rules)
 

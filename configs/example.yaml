@@ -1,4 +1,4 @@
-# File Organizer config — copy to config.yaml and adjust.
+# File Organizer example config — copy to configs/<your-name>.yaml and adjust.
 
 watch_dirs:
   - path: ~/Downloads

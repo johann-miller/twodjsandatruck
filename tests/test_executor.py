@@ -3,6 +3,20 @@ from pathlib import Path
 
 from organizer.config import Rule
 from organizer.executor import make_context, process_path, resolve_template
+from tests.helpers import make_mp3
+
+
+def make_zip_rule(dest: Path, **overrides) -> Rule:
+    defaults = dict(
+        name="extract",
+        match={"extension": [".zip"]},
+        source={"type": "archive", "inspect": "audio_tags"},
+        destination={"template": str(dest)},
+        action="extract",
+        on_conflict="skip",
+    )
+    defaults.update(overrides)
+    return Rule(**defaults)
 
 
 def make_move_rule(**overrides) -> Rule:
@@ -153,6 +167,107 @@ def test_extract_refuses_zip_slip(tmp_path: Path):
     )
     process_path(archive, rule)
     assert not outside.exists()
+
+
+def test_extract_preserves_single_root_folder(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    archive = src / "album.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("AlbumName/01 track.mp3", b"aaa")
+        zf.writestr("AlbumName/cover.jpg", b"bbb")
+
+    process_path(archive, make_zip_rule(dest))
+    assert (dest / "AlbumName/01 track.mp3").read_bytes() == b"aaa"
+    assert (dest / "AlbumName/cover.jpg").read_bytes() == b"bbb"
+
+
+def test_extract_strips_artist_and_album_matching_tags(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    track = make_mp3(src / "track.mp3", artist="Daft Punk", album="Random Access Memories")
+    archive = src / "album.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.write(track, "Daft Punk/Random Access Memories/01 Get Lucky.mp3")
+
+    rule = make_zip_rule(dest, destination={"template": f"{dest}/{{artist}}/{{album}}", "create_dirs": True})
+    process_path(archive, rule)
+    assert (dest / "Daft Punk" / "Random Access Memories" / "01 Get Lucky.mp3").exists()
+    assert not (dest / "01 Get Lucky.mp3").exists()
+
+
+def test_extract_strips_artist_level_only(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    track = make_mp3(src / "track.mp3", artist="Daft Punk", album="Random Access Memories")
+    archive = src / "album.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.write(track, "Daft Punk/01 Get Lucky.mp3")
+
+    rule = make_zip_rule(dest, destination={"template": f"{dest}/{{artist}}", "create_dirs": True})
+    process_path(archive, rule)
+    assert (dest / "Daft Punk" / "01 Get Lucky.mp3").exists()
+    assert not (dest / "01 Get Lucky.mp3").exists()
+
+
+def test_extract_preserves_album_folder_under_artist(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    track = make_mp3(src / "track.mp3", artist="Daft Punk", album="Random Access Memories")
+    archive = src / "album.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.write(track, "Random Access Memories/01 Get Lucky.mp3")
+
+    rule = make_zip_rule(dest, destination={"template": f"{dest}/{{artist}}", "create_dirs": True})
+    process_path(archive, rule)
+    assert (dest / "Daft Punk" / "Random Access Memories" / "01 Get Lucky.mp3").exists()
+    assert not (dest / "Daft Punk" / "01 Get Lucky.mp3").exists()
+
+
+def test_extract_keeps_multiple_top_level_folders(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    archive = src / "multi.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("BandA/albumA/a.mp3", b"a")
+        zf.writestr("BandB/albumB/b.mp3", b"b")
+
+    process_path(archive, make_zip_rule(dest))
+    assert (dest / "BandA/albumA/a.mp3").read_bytes() == b"a"
+    assert (dest / "BandB/albumB/b.mp3").read_bytes() == b"b"
+
+
+def test_extract_does_not_strip_stray_root_file(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    archive = src / "mixed.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("AlbumName/01 track.mp3", b"aaa")
+        zf.writestr("cover.jpg", b"bbb")
+
+    process_path(archive, make_zip_rule(dest))
+    assert (dest / "AlbumName/01 track.mp3").read_bytes() == b"aaa"
+    assert (dest / "cover.jpg").read_bytes() == b"bbb"
+
+
+def test_extract_flat_zip_untouched(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "out"
+    src.mkdir()
+    archive = src / "flat.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("01 track.mp3", b"aaa")
+        zf.writestr("cover.jpg", b"bbb")
+
+    process_path(archive, make_zip_rule(dest))
+    assert (dest / "01 track.mp3").read_bytes() == b"aaa"
+    assert (dest / "cover.jpg").read_bytes() == b"bbb"
 
 
 def test_extract_dir_conflict_rename(tmp_path: Path):

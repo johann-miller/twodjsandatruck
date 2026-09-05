@@ -15,6 +15,11 @@ See [SPEC.md](spec.md) for the full spec sheet.
   inspection (including inside zip archives), path templates with
   `{artist}`, `{album}`, `{year}`, `{month}` placeholders, per-rule conflict
   handling (`skip`/`rename`/`overwrite`/`prompt`).
+- **Template-aware zip stripping** — a leading zip folder is removed only when
+  it would be re-created by the destination template (its name matches the
+  resolved `{artist}`/`{album}` placeholder). Otherwise the zip's own album
+  folder is preserved, e.g. a `music/{artist}` destination keeps each zip's
+  inner folder while avoiding `Artist/Album/...` duplication.
 - **`--dry-run`** — logs intended actions without touching the filesystem.
 - Rich console output (summary tables, live watch logging) plus a rotating
   log file.
@@ -45,21 +50,26 @@ pip install -r requirements.txt
 
 ## Usage
 
+Config files live in `configs/`. Copy `configs/example.yaml` to your own
+`configs/<name>.yaml` — personal configs there are gitignored, so they stay
+out of the public repo. All commands default to `config.yaml` if you don't
+pass `--config`:
+
 ```bash
 # validate a config and show the rules it selected
-organize validate --config config.yaml
+organize validate --config configs/jellyfin.yaml
 
 # one-shot run over the configured watch dirs
-organize run --config config.yaml
+organize run --config configs/jellyfin.yaml
 
 # scan a specific directory recursively
-organize run --config config.yaml --source ~/Downloads --recursive
+organize run --config configs/jellyfin.yaml --source ~/Downloads --recursive
 
 # safe test run (nothing is moved/copied/extracted)
-organize run --config config.yaml --dry-run
+organize run --config configs/jellyfin.yaml --dry-run
 
 # long-running watch mode
-organize watch --config config.yaml
+organize watch --config configs/jellyfin.yaml
 ```
 
 ## systemd watch mode
