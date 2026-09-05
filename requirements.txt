@@ -1,0 +1,8 @@
+PyYAML>=6.0
+mutagen>=1.47
+python-magic>=0.4.27
+watchdog>=4.0
+click>=8.1
+pydantic>=2.5
+rich>=13.7
+pytest>=8.0

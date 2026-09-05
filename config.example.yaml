@@ -1,0 +1,57 @@
+# File Organizer config — copy to config.yaml and adjust.
+
+watch_dirs:
+  - path: ~/Downloads
+    recursive: false
+
+rules:
+  - name: "music-albums"
+    match:
+      extension: [".zip"]
+    source:
+      type: "archive"
+      inspect: "audio_tags"
+    destination:
+      template: "/media/Music/{artist}/{album}"
+      create_dirs: true
+    on_conflict: "rename"
+    action: "extract"
+
+  - name: "music-singles"
+    match:
+      extension: [".mp3", ".flac", ".m4a"]
+    source:
+      type: "file"
+      inspect: "audio_tags"
+    destination:
+      template: "/media/Music/{artist}/{album}"
+    on_conflict: "skip"
+    action: "move"
+
+  - name: "documents"
+    match:
+      extension: [".pdf", ".docx"]
+    destination:
+      template: "/media/Documents/{year}/{month}"
+    on_conflict: "skip"
+    action: "move"
+
+  - name: "images"
+    match:
+      mime_type: ["image/"]
+    destination:
+      template: "/media/Pictures/{year}/{month}"
+    on_conflict: "rename"
+    action: "move"
+
+  - name: "oversized"
+    match:
+      min_size: 1073741824
+    destination:
+      template: "/media/Downloads"
+    on_conflict: "overwrite"
+    action: "move"
+
+logging:
+  level: "info"
+  file: "~/.local/share/file-organizer/log.txt"

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "file-organizer"
+version = "0.1.0"
+description = "Local CLI/watch application that organizes files into destination directories from user-defined YAML rules"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "PyYAML>=6.0",
+    "mutagen>=1.47",
+    "python-magic>=0.4.27",
+    "watchdog>=4.0",
+    "click>=8.1",
+    "pydantic>=2.5",
+    "rich>=13.7",
+]
+
+[project.scripts]
+organize = "organizer.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+packages = ["organizer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
